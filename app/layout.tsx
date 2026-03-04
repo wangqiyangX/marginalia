@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import localFont from "next/font/local";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -10,6 +11,35 @@ const geistSans = Geist({
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+});
+
+const sourceHanSerifSc = localFont({
+  src: [
+    {
+      path: "./fonts/SourceHanSerifSC-VF.otf.woff2",
+      weight: "200 900",
+      style: "normal",
+    },
+  ],
+  variable: "--font-source-han-serif-sc",
+  display: "swap",
+});
+
+const yozai = localFont({
+  src: [
+    {
+      path: "./fonts/Yozai-Regular.ttf",
+      weight: "400",
+      style: "normal",
+    },
+    {
+      path: "./fonts/Yozai-Medium.ttf",
+      weight: "500",
+      style: "normal",
+    },
+  ],
+  variable: "--font-yozai",
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -25,7 +55,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} ${sourceHanSerifSc.variable} ${yozai.variable} antialiased`}
       >
         {children}
       </body>

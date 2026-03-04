@@ -22,5 +22,123 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), sans-serif;
+}
+
+.translation-block,
+.translation-block .translation-line {
+  font-family: var(--font-source-han-serif-sc), "Source Han Serif SC", "Noto Serif CJK SC", "Songti SC", "STSong", serif;
+}
+
+.translation-panel {
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(-6px);
+  pointer-events: none;
+  transition:
+    max-height 0.24s ease,
+    opacity 0.2s ease,
+    transform 0.2s ease;
+}
+
+body[data-translations="on"] .translation-panel {
+  max-height: 1200px;
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .translation-panel {
+    transition: none;
+  }
+}
+
+code,
+pre,
+kbd,
+samp {
+  font-family: var(--font-geist-mono), monospace;
+}
+
+pre[data-theme] {
+  margin: 1rem 0;
+  overflow-x: auto;
+  border-radius: 0.75rem;
+  border: 1px solid #e4e4e7;
+  padding: 1rem;
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+pre[data-theme] code {
+  display: grid;
+}
+
+pre[data-theme] [data-line] {
+  padding: 0 0.1rem;
+}
+
+code[data-theme*=" "] span {
+  color: var(--shiki-light);
+}
+
+p code,
+li code,
+blockquote code {
+  border-radius: 0.375rem;
+  background: #f4f4f5;
+  padding: 0.1rem 0.35rem;
+  font-size: 0.9em;
+}
+
+.anchor-target {
+  transition: box-shadow 0.2s ease;
+}
+
+.anchor-target:target {
+  box-shadow: inset 0 0 0 9999px rgba(113, 113, 122, 0.12);
+}
+
+@media (prefers-color-scheme: dark) {
+  code[data-theme*=" "] span {
+    color: var(--shiki-dark);
+  }
+
+  pre[data-theme] {
+    border-color: #3f3f46;
+  }
+
+  p code,
+  li code,
+  blockquote code {
+    background: #27272a;
+  }
+
+  .anchor-target:target {
+    box-shadow: inset 0 0 0 9999px rgba(63, 63, 70, 0.28);
+  }
+}
+
+.marginalia-note {
+  color: #b91c1c;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  letter-spacing: 0.01em;
+  font-family: var(--font-yozai), "Songti SC", serif;
+}
+
+.marginalia-note-collapsed {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+
+@media (prefers-color-scheme: dark) {
+  .marginalia-note {
+    color: #fca5a5;
+  }
 }
