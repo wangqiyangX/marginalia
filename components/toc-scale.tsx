@@ -91,7 +91,7 @@ export function TocScale({ items }: TocScaleProps) {
   }
 
   return (
-    <nav className="fixed left-6 top-1/2 z-20 hidden -translate-y-1/2 overflow-visible lg:block">
+    <nav className="zen-toc fixed left-6 top-1/2 z-20 hidden -translate-y-1/2 overflow-visible md:block">
       <ul className="space-y-0">
         {items.map((item) => {
           const isHovered = hoveredId === item.id;

@@ -1,0 +1,371 @@
+---
+source: "Designing Data-Intensive Applications"
+author: "Martin Kleppmann & Chris Riccomini"
+updatedAt: "git"
+---
+
+# Defining Nonfunctional Requirements
+
+> The Internet was done so well that most people think of it as a natural
+> resource like the Pacific Ocean, rather than something that was man-made. When
+> was the last time a technology with a scale like that was so error-free?
+>
+> —Alan Kay, in interview with Dr. Dobb’s Journal (2012)
+
+If you are building an application, you will be driven by a list of
+requirements. At the top of your list is most likely the functionality that the
+application must offer: what screens and what buttons you need, and what each
+operation is supposed to do in order to fulfill the purpose of your software.
+These are your functional requirements.
+
+In addition, you probably have nonfunctional requirements: for example, the app
+should be fast, reliable, secure, legally compliant, and easy to maintain. These
+require‐ ments might not be explicitly written down, because they may seem
+somewhat obvi‐ ous, but they are just as important as the app’s functionality;
+an app that is unbearably slow or unreliable might as well not exist.
+
+Many nonfunctional requirements, such as security, fall outside the scope of
+this book. But we will consider a few, and this chapter will help you articulate
+them for your own systems. In particular, we will look at the following:
+
+- Defining and measuring the performance of a system
+- What it means for a service to be reliable—namely, continuing to work
+  correctly, even when things go wrong
+- Allowing a system to be scalable by having efficient ways of adding computing
+  capacity as the load on the system grows
+- Making it easier to maintain a system in the long term
+
+The terminology introduced in this chapter will also be useful in the following
+chapters, when we go into the details of how data-intensive systems are
+implemented. However, abstract definitions can be quite dry; to make the ideas
+more concrete, we will start this chapter with a case study of a social
+networking service, which will provide practical examples of performance and
+scalability.
+
+## Case Study: Social Network Home Timelines
+
+Imagine we have been given the task of implementing a social network in the
+style of X (formerly Twitter), where users can post messages and follow other
+users. This will be a huge simplification of how such a service actually works
+[1, 2, 3], but it will help illustrate some of the issues that arise in
+large-scale systems.
+
+Let’s assume that users make a total of 500 million posts per day, or 5,800
+posts per second on average. Occasionally, the rate can spike to as high as
+150,000 posts per second [4]. Let’s also assume that the average user follows
+200 people and has 200 followers (although there is a very wide range: most
+people have only a handful of followers, and a few celebrities, such as Barack
+Obama, have over 100 million followers).
+
+%%marginalia 这个量真的很吓人，个人项目基本上很难遇到吧
+
+### Representing Users, Posts, and Follows
+
+We keep all the data in a relational database, as shown in [[Figure 2-1]]. We
+have one table for users, one table for posts, and one table for follow
+relationships.
+
+![Figure 2-1. A simple relational schema for a social network in which users can
+follow one another](/content/defining-nonfunctional-requirements/figure-2-1.png)
+
+Let’s say the main read operation that our social network must support is the
+home timeline, which displays recent posts by people the user is following (for
+simplicity we will ignore ads, suggested posts from people they are not
+following, and other extensions). We could write the following SQL query to get
+the home timeline for a particular user:
+
+```SQL
+SELECT posts.*, users.* FROM posts
+  JOIN follows ON posts.sender_id = follows.followee_id
+  JOIN users ON posts.sender_id = users.id
+  WHERE follows.follower_id = current_user
+  ORDER BY posts.timestamp DESC
+  LIMIT 1000
+```
+
+To execute this query, the database will use the follows table to find everybody
+who current_user is following, look up recent posts by those users, and sort
+them by timestamp to get the most recent 1,000 posts by any of the followed
+users.
+
+Posts are supposed to be timely, so let’s assume that after somebody makes a
+post, we want their followers to be able to see it within five seconds. One
+approach is for the user’s client to repeat the preceding query every five
+seconds while the user is online (this is known as polling). If we assume that
+10 million users are online and logged in at the same time, that would mean
+running the query 2 million times per second. Even if we were to poll less
+frequently, this is a lot.
+
+This query is also quite expensive: if a user is following 200 people, the query
+needs to fetch a list of recent posts by each of those 200 people and merge
+those lists. Two million timeline queries per second times 200 followed accounts
+makes 400 million lookups per second—a huge number. And that’s the average case.
+Some users follow tens of thousands of accounts; for them, this query is very
+expensive to execute and difficult to make fast.
+
+### Materializing and Updating Timelines
+
+How can we do better? First, instead of polling, it would be better if the
+server actively pushed new posts to any followers who are currently online.
+Second, we should precompute the results of the query so that a user’s request
+for their home timeline can be served from a cache.
+
+Imagine that for each user, we store a data structure containing their home
+timeline (i.e., the recent posts by people they are following). Every time a
+user makes a post, we look up all their followers and insert that post into the
+home timeline of each follower—like delivering a message to a mailbox. Now when
+a user logs in, we can simply give them this precomputed home timeline.
+Moreover, to receive a notification about any new posts on their timeline, the
+user’s client simply needs to subscribe to the stream of posts being added to
+their home timeline.
+
+The downside of this approach is that we now need to do more work every time a
+user makes a post, because the home timelines are derived data that needs to be
+updated. The process is illustrated in [[Figure 2-2]]. When one initial request
+results in several downstream requests being carried out, we use the term
+fan-out to describe the factor by which the number of requests increases.
+
+![Figure 2-2. Fan-out: delivering new posts to every follower of the user who
+made the post](/content/defining-nonfunctional-requirements/figure-2-2.png)
+
+At a rate of 5,800 posts per second, if the average post reaches 200 followers
+(i.e., a fan-out factor of 200), we will need to do just over 1 million home
+timeline writes per second. This is a lot, but it’s still a significant saving
+compared to the 400 million per-sender post lookups per second that we would
+otherwise have to do.
+
+If the rate of posts spikes because of a special event, we don’t have to do the
+timeline deliveries immediately—we can enqueue them and accept that it will
+temporarily take a bit longer for posts to show up in followers’ timelines. Even
+during such load spikes, timelines remain fast to load, since we simply serve
+them from a cache.
+
+This process of precomputing and updating the results of a query is called
+materiali‐ zation, and the timeline cache is an example of a materialized view
+(a concept we will discuss further in later chapters). The materialized view
+speeds up reads, but in return we have to do more work on writes. The cost of
+writes for most users is modest, but a social network also has to consider some
+extreme cases:
+
+- If a user is following a very large number of accounts, and those accounts
+  post a lot, that user will have a high rate of writes to their materialized
+  timeline. However, that user is not likely reading all the posts in their
+  timeline, so it’s OK to simply drop some of their timeline writes and show the
+  user only a sample of the posts from the accounts they’re following [5].
+
+- When a celebrity account with a very large number of followers makes a post,
+  we have to do a lot of work to insert that post into the home timelines of
+  each of their millions of followers. In this case, dropping some of those
+  writes is not OK. One way of solving this problem is to handle celebrity posts
+  separately from everyone else’s posts: we can save ourselves the effort of
+  adding celebrity posts to millions of timelines by storing them separately and
+  merging them with the materialized timeline when it is read. Despite such
+  optimizations, handling celebrities on a social network can require a lot of
+  infrastructure [6].
+
+## Describing Performance
+
+Most discussions of software performance consider two main types of metric:
+
+_Response time_ : The elapsed time from the moment when a user makes a request
+until they receive the requested answer. The unit of measurement is seconds (or
+milli‐ seconds, or microseconds).
+
+_Throughput_ : The number of requests per second, or the data volume per second,
+that the system is processing. For a given allocation of hardware resources,
+there is a maximum throughput that can be handled. The unit of measurement is
+“some‐ things per second.”
+
+In the social network case study, “posts per second” and “timeline writes per
+second” are throughput metrics, whereas “time it takes to load the home
+timeline” and “time until a post is delivered to followers” are response time
+metrics.
+
+Throughput and response time are often related. An example of such a
+relationship for an online service is sketched in [[Figure 2-3]]. The service
+has a low response time when request throughput is low, but response time
+increases as load increases. This is because of queueing: when a request arrives
+on a highly loaded system, the CPU is likely already in the process of handling
+an earlier request, and therefore the incoming request needs to wait until the
+earlier request has been completed. As throughput approaches the maximum that
+the hardware can handle, queueing delays increase sharply.
+
+![Figure 2-3. As the throughput of a service approaches its capacity, the
+response time increases dramatically because of
+queueing.](/content/defining-nonfunctional-requirements/figure-2-3.png)
+
+===When an Overloaded System Won’t Recover If a system is close to overload,
+with throughput pushed close to the limit, it can sometimes enter a vicious
+cycle where it becomes less efficient and hence even more overloaded. For
+example, if a long queue of requests is waiting to be handled, response times
+may increase so much that clients time out and resend their requests. This
+causes the rate of requests to increase even further, making the problem worse—
+a retry storm. Even when the load is reduced again, such a system may remain in
+an overloaded state until it is rebooted or otherwise reset. This phenomenon is
+called a metastable failure, and it can cause serious outages in production
+systems [7, 8, 9].
+
+To avoid retries overloading a service, you can increase and randomize the time
+between successive retries on the client side (exponential backoff [10, 11]) and
+tem‐ porarily stop sending requests to a service that has returned errors or
+timed out recently (by using a circuit breaker [12, 13] or token bucket
+algorithm [14]). The server can also detect when it is approaching overload and
+start proactively rejecting requests (load shedding [15]), or send back
+responses asking clients to slow down (backpressure [1, 16]). The choice of
+queueing and load balancing algorithms can also make a difference [17].
+===
+
+In terms of {{performance metrics|用来衡量一个系统、产品、团队或个人表现好坏的可
+量化数据}}, the response time is usually what users care about the most, whereas
+the throughput determines the required computing resources (e.g., how many
+servers you need) and hence the cost of serving a particular workload. If
+throughput is likely to increase beyond the current hardware’s capability, the
+capacity needs to be expanded; a system is said to be scalable if its maximum
+throughput can be significantly increased by adding computing resources.
+
+In this section we will focus primarily on response times, and we will return to
+throughput and scalability in “Scalability” on page 49.
+
+### Latency and Response Time
+
+“Latency” and “response time” are sometimes used interchangeably, but in this
+book we will use these and a few related terms in a specific way (illustrated in
+Figure 2-4):
+
+- The _response time_ is what the client sees; it includes all delays incurred
+  anywhere in the system.
+- The _service time_ is the duration for which the service is actively
+  processing the client’s request.
+- _Queueing delays_ can occur at several points in the flow—for example, after a
+  request is received, it might need to wait until a CPU is available before it
+  can be processed, or a response packet might need to be buffered before it is
+  sent over the network if other tasks on the same machine are sending a lot of
+  data via the outbound network interface.
+
+- _Latency_ is a {{catchall|笼统的话}} term for time during which a request is
+  not being actively processed—that is, during which it is latent. In
+  particular, _network latency_ or _network delay_ refers to the time that a
+  request and response spend traveling through the network.
+
+%%marginalia 从发出请求到收到响应，数据包在网络中耗费的时间
+
+![Figure 2-4. Response time, service time, network latency, and queueing
+delay](/content/defining-nonfunctional-requirements/figure-2-4.png)
+
+In [[Figure 2-4]], time flows from left to right; each communicating node is
+shown as a horizontal line, and a request or response message is shown as a
+thick diagonal arrow from one node to another. You will encounter this style of
+diagram frequently over the course of this book.
+
+The response time can vary significantly from one request to the next, even if
+you keep making the same request over and over again. Many factors can add
+random delays—for example, a context switch to a background process, the loss of
+a network packet and TCP retransmission, a garbage collection pause, a page
+fault forcing a read from disk, or mechanical vibrations in the server rack
+[18]. We will discuss this topic in more detail in “Timeouts and Unbounded
+Delays” on page 352.
+
+%%marginalia 所以单个请求的数据在统计学上是没有太大的意义的
+
+Queueing delays often account for a large part of the variability in response
+times. As a server can process only a small number of things in parallel
+(limited, for example, by its number of CPU cores), it takes only a small number
+of slow requests to hold up the processing of subsequent requests—an effect
+known as {{_head-of-line blocking_|队头阻塞}}. Even if those subsequent requests
+have fast service times, the client will see a slow overall response time due to
+the time waiting for the prior request to complete. The queueing delay is not
+part of the service time, and for this reason it is important to measure
+response times on the client side.
+
+### Average, Median, and Percentiles
+
+Because the response time varies from one request to the next, we need to think
+of it not as a single number, but as a distribution of values that we can
+measure. In [[Figure 2-5]], each gray bar represents a request to a service, and
+its height shows how long that request took. Most requests are reasonably fast,
+but occasional outliers take much longer. Variation in network delay is also
+known as jitter.
+
+![Figure 2-5. Illustrating mean and percentiles: response times for a sample of
+100 requests to a
+service](/content/defining-nonfunctional-requirements/figure-2-5.png)
+
+It’s common to report the _average_ response time of a service (technically, the
+arithmetic mean, which you find by summing all the response times and dividing
+by the number of requests). The mean response time is useful for estimating
+throughput limits [19]. However, the mean is not a very good metric if you want
+to know your “typical” response time, because it doesn’t tell you how many users
+actually experienced that delay.
+
+%%marginalia 算术平均值无法体现一组数据的典型特征！
+
+Usually it’s better to use {{_percentiles_|百分位数}}. If you take your list of
+response times and sort it from fastest to slowest, the {{_median_|中位数}} is
+the halfway point—for example, if your median response time is 200 ms, that
+means half your requests return in less than 200 milliseconds (ms), and half
+your requests take longer. This makes the median a good metric if you want to
+know how long users typically have to wait. The median is also known as the
+{{*50th percentile*|50分位数}}, sometimes abbreviated as _p50_.
+
+%%marginalia 百分位数更能体现数据的整体特性，中位数是 50 分位数
+
+To figure out how bad your outliers are, you can look at higher percentiles: the
+95th, 99th, and 99.9th percentiles are common (abbreviated p95, p99, and p999).
+For example, if the 95th percentile response time is 1.5 seconds, that means 95
+out of 100 requests take less than 1.5 seconds, and 5 out of 100 requests take
+1.5 seconds or more. This is illustrated in [[Figure 2-5]].
+
+High response-time percentiles, also known as tail latencies, are important
+because they directly affect users’ experience of the service. For example,
+Amazon describes response time requirements for internal services in terms of
+the 99.9th percentile, even though this affects only 1 in 1,000 requests. This
+is because the customers with the slowest requests are often those who have the
+most data on their accounts, as they have made many purchases—that is, they’re
+the most valuable customers [20]. It’s important to keep those customers happy
+by ensuring the website is fast for them.
+
+[1] Mike Cvet. “How We Learned to Stop Worrying and Love Fan-in at Twitter.” At
+QCon San Francisco, December 2016.
+
+[2] Raffi Krikorian. “Timelines at Scale.” At QCon San Francisco, November 2012.
+Archived at perma.cc/V9G5-KLYK
+
+[3] Twitter. “Twitter’s Recommendation Algorithm.” blog.x.com, March 2023.
+Archived at perma.cc/L5GT-229T
+
+[4] Raffi Krikorian. “New Tweets per Second Record, and How!” blog.x.com, August 2013. Archived at perma.cc/6JZN-XJYN
+
+[5] Jaz Volpert. “When Imperfect Systems Are Good, Actually: Bluesky’s Lossy
+Timelines.” jazco.dev, February 2025. Archived at perma.cc/2PVE-L2MX
+
+[6] Samuel Axon. “3% of Twitter’s Servers Dedicated to Justin Bieber.”
+mashable.com, September 2010. Archived at perma.cc/F35N-CGVX
+
+[7] Nathan Bronson, Abutalib Aghayev, Aleksey Charapko, and Timothy Zhu.
+“Metastable Failures in Distributed Systems.” At Workshop on Hot Topics in
+Operating Systems (HotOS), May 2021. doi:10.1145/3458336.3465286
+
+[8] Marc Brooker. “Metastability and Distributed Systems.” brooker.co.za, May 2021. Archived at perma.cc/7FGJ-7XRK
+
+[9] Lexiang Huang, Matthew Magnusson, Abishek Bangalore Muralikrishna, Salman
+Estyak, Rebecca Isaacs, Abutalib Aghayev, Timothy Zhu, and Aleksey Charapko.
+“Metastable Failures in the Wild.” At 16th USENIX Symposium on Operating Systems
+Design and Implementation (OSDI), July 2022.
+
+[10] Marc Brooker. “Exponential Backoff and Jitter.” aws.amazon.com, March 2015.
+Archived at perma.cc/R6MS-AZKH
+
+[11] Marc Brooker. “What Is Backoff For?” brooker.co.za, August 2022. Archived
+at perma.cc/PW9N-55Q5
+
+[12] Michael T. Nygard. Release It!, 2nd edition. Pragmatic Bookshelf, 2018.
+ISBN: 9781680502398
+
+[13] Frank Chen. “Slowing Down to Speed Up—Circuit Breakers for Slack’s CI/CD.”
+slack.engineering, August 2022. Archived at perma.cc/5FGS-ZPH3
+
+[14] Marc Brooker. “Fixing Retries with Token Buckets and Circuit Breakers.”
+brooker.co.za, February 2022. Archived at perma.cc/MD6N-GW26
+
+[15] David Yanacek. “Using Load Shedding to Avoid Overload.” Amazon Builders’
+Library, aws.amazon.com. Archived at perma.cc/9SAW-68MP

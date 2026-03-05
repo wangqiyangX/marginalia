@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { MDXRemote } from "next-mdx-remote/rsc";
 import remarkDeflist from "remark-deflist";
@@ -8,8 +7,11 @@ import rehypePrettyCode from "rehype-pretty-code";
 import { MarginaliaNotes } from "@/components/marginalia-notes";
 import { mdxComponents } from "@/components/mdx-components";
 import { TocScale } from "@/components/toc-scale";
+import { TransitionLink } from "@/components/transition-link";
 import { TranslationBlock } from "@/components/translation-block";
 import { TranslationVisibilityToggle } from "@/components/translation-visibility-toggle";
+import { ZenFocusController } from "@/components/zen-focus-controller";
+import { ZenModeToggle } from "@/components/zen-mode-toggle";
 import { getMdxList, getMdxPage } from "@/lib/mdx";
 
 type ChapterPageProps = {
@@ -45,6 +47,23 @@ function toTocLabel(
   };
 }
 
+function formatUpdatedAt(value?: string): string | null {
+  if (!value) {
+    return null;
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+  }).format(date);
+}
+
 export default async function ChapterPage({ params }: ChapterPageProps) {
   const { slug } = await params;
   const page = await getMdxPage(slug);
@@ -53,7 +72,6 @@ export default async function ChapterPage({ params }: ChapterPageProps) {
     notFound();
   }
 
-  const hasAnyNotes = page.blocks.some((block) => block.notes.length > 0);
   const tocItems = page.blocks
     .filter((block) => block.kind === "heading" && block.anchorId)
     .map((block) => {
@@ -75,20 +93,34 @@ export default async function ChapterPage({ params }: ChapterPageProps) {
   const tocScaleItems = tocItems.filter(
     (item) => item.level === 2 || item.level === 3,
   );
+  const updatedAtLabel = formatUpdatedAt(page.updatedAt);
+  const hasMeta = Boolean(page.source || page.author || updatedAtLabel);
 
   return (
-    <main className="min-h-screen p-8 text-zinc-900 dark:text-zinc-100">
+    <main className="relative min-h-screen p-8 text-zinc-900 dark:text-zinc-100">
       <TocScale items={tocScaleItems} />
+      <ZenFocusController />
+
+      {hasMeta ? (
+        <aside className="zen-meta hidden md:absolute md:top-6 md:left-6 md:block md:max-w-xs md:text-xs md:leading-6 md:text-zinc-500 dark:md:text-zinc-400">
+          {page.source ? <p>{page.source}</p> : null}
+          {page.author ? <p>{page.author}</p> : null}
+          {updatedAtLabel ? <p>{updatedAtLabel}</p> : null}
+        </aside>
+      ) : null}
 
       <section className="mx-auto w-full max-w-3xl space-y-6">
-        <div className="flex items-center justify-between gap-4 px-2 md:px-4">
-          <Link
+        <div className="flex items-start justify-between gap-4 px-2 md:px-4">
+          <TransitionLink
             href="/"
             className="text-sm text-zinc-500 underline-offset-2 hover:underline dark:text-zinc-400"
           >
             Back to chapter list
-          </Link>
-          <TranslationVisibilityToggle />
+          </TransitionLink>
+          <div className="flex items-center">
+            <ZenModeToggle />
+            <TranslationVisibilityToggle />
+          </div>
         </div>
 
         <article className="space-y-4 px-2 py-1 md:px-4">
@@ -102,6 +134,13 @@ export default async function ChapterPage({ params }: ChapterPageProps) {
               <section
                 key={`${block.anchorId ?? "block"}-${index}`}
                 id={block.anchorId}
+                data-zen-body={
+                  block.kind === "paragraph" ||
+                  block.kind === "blockquote" ||
+                  block.kind === "heading"
+                    ? "true"
+                    : undefined
+                }
                 className={
                   block.anchorId ? "anchor-target scroll-mt-24" : undefined
                 }
@@ -137,14 +176,37 @@ export default async function ChapterPage({ params }: ChapterPageProps) {
               </section>
             );
           })}
-
-          {!hasAnyNotes ? (
-            <p className="text-sm text-zinc-600 dark:text-zinc-400">
-              No annotations for this chapter yet. Add a paragraph starting with{" "}
-              <code>%%marginalia</code> right below content to create one.
-            </p>
-          ) : null}
         </article>
+
+        {page.references.length > 0 ? (
+          <section className="px-2 pt-3 md:px-4">
+            <h2 className="text-lg font-semibold text-zinc-800 dark:text-zinc-200">
+              References
+            </h2>
+            <ul className="mt-3 space-y-2 text-sm leading-7 text-zinc-700 dark:text-zinc-300">
+              {page.references.map((reference) => (
+                <li
+                  key={reference.key}
+                  id={`ref-${reference.index}`}
+                  className="reference-target scroll-mt-24 rounded-md px-2 py-1"
+                >
+                  <span className="mr-1 text-zinc-600 dark:text-zinc-400">
+                    [{reference.index}]
+                  </span>
+                  <span>
+                    {reference.text ? (
+                      reference.text
+                    ) : (
+                      <span className="italic text-zinc-500 dark:text-zinc-400">
+                        Missing reference definition for <code>{reference.key}</code>.
+                      </span>
+                    )}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
       </section>
     </main>
   );

@@ -1,4 +1,7 @@
 import { Noto_Serif } from "next/font/google";
+import Image from "next/image";
+import type { ReactNode } from "react";
+import { CitationRef } from "@/components/citation-ref";
 import { GlossaryTerm } from "@/components/glossary-term";
 
 const bodySerif = Noto_Serif({
@@ -6,8 +9,35 @@ const bodySerif = Noto_Serif({
   weight: ["400", "500", "600", "700"],
 });
 
+function toFigureId(token: string): string {
+  return `figure-${token
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")}`;
+}
+
+type TripleEqualsBlockProps = {
+  title: string;
+  children: ReactNode;
+};
+
+function TripleEqualsBlock({ title, children }: TripleEqualsBlockProps) {
+  return (
+    <section className="my-5 border-t border-b border-zinc-300 px-4 py-3 text-zinc-400 dark:border-zinc-700 dark:text-zinc-500">
+      <p
+        className={`${bodySerif.className} mb-3 text-center text-2xl leading-8 font-semibold text-zinc-500 dark:text-zinc-400`}
+      >
+        {title}
+      </p>
+      <div className="[&>p+p]:mt-3">{children}</div>
+    </section>
+  );
+}
+
 export const mdxComponents = {
+  CitationRef,
   GlossaryTerm,
+  TripleEqualsBlock,
   h1: (props: React.ComponentPropsWithoutRef<"h1">) => (
     <h1
       className="text-4xl font-bold text-zinc-900 dark:text-zinc-100"
@@ -51,10 +81,7 @@ export const mdxComponents = {
     />
   ),
   blockquote: (props: React.ComponentPropsWithoutRef<"blockquote">) => (
-    <blockquote
-      className={`${bodySerif.className} rounded-md bg-zinc-100/80 px-4 py-3 italic text-zinc-700 dark:bg-zinc-900/70 dark:text-zinc-300`}
-      {...props}
-    />
+    <blockquote className={`${bodySerif.className} mdx-quote`} {...props} />
   ),
   ul: (props: React.ComponentPropsWithoutRef<"ul">) => (
     <ul
@@ -93,6 +120,7 @@ export const mdxComponents = {
     />
   ),
   a: (props: React.ComponentPropsWithoutRef<"a">) => {
+    const { className, ...restProps } = props;
     const isExternal =
       typeof props.href === "string" &&
       (props.href.startsWith("http://") || props.href.startsWith("https://"));
@@ -110,15 +138,49 @@ export const mdxComponents = {
 
     return (
       <a
-        className={
+        className={`${
           isPlainUrlLabel
             ? "text-sky-700 underline decoration-sky-500 underline-offset-4 hover:text-sky-800 dark:text-sky-300 dark:decoration-sky-400 dark:hover:text-sky-200"
             : "text-zinc-700 underline decoration-zinc-400 underline-offset-4 hover:text-zinc-900 dark:text-zinc-300 dark:decoration-zinc-500 dark:hover:text-zinc-100"
-        }
+        } ${className ?? ""}`.trim()}
         target={isExternal ? "_blank" : props.target}
         rel={isExternal ? "noreferrer noopener" : props.rel}
-        {...props}
+        {...restProps}
       />
+    );
+  },
+  img: (props: React.ComponentPropsWithoutRef<"img">) => {
+    const caption =
+      typeof props.alt === "string"
+        ? props.alt.replace(/\s+/g, " ").trim()
+        : "";
+    const src = typeof props.src === "string" ? props.src : undefined;
+    const figureMatch = caption.match(/^Figure\s+([A-Za-z0-9.-]+)/i);
+    const figureId = figureMatch ? toFigureId(figureMatch[1]) : undefined;
+
+    if (!src) {
+      return null;
+    }
+
+    return (
+      <span
+        id={figureId}
+        className="figure-anchor my-6 block scroll-mt-24 space-y-2 rounded-md"
+      >
+        <Image
+          src={src}
+          alt={props.alt ?? ""}
+          width={1200}
+          height={800}
+          sizes="(max-width: 768px) 100vw, 768px"
+          className={`h-auto w-full max-w-full rounded-md ${props.className ?? ""}`.trim()}
+        />
+        {caption ? (
+          <span className="block text-sm italic text-zinc-600 dark:text-zinc-400">
+            {caption}
+          </span>
+        ) : null}
+      </span>
     );
   },
 };

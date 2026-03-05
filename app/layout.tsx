@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import { Geist, Geist_Mono } from "next/font/google";
+import { PageTransitionController } from "@/components/page-transition-controller";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -57,7 +58,8 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${sourceHanSerifSc.variable} ${yozai.variable} antialiased`}
       >
-        {children}
+        <PageTransitionController />
+        <div id="route-shell">{children}</div>
       </body>
     </html>
   );

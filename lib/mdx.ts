@@ -1,11 +1,15 @@
 import { promises as fs } from "node:fs";
+import { execFileSync } from "node:child_process";
 import path from "node:path";
 
-const MDX_DIR = path.join(process.cwd(), "content", "mdx");
+const MDX_DIR = path.join(process.cwd(), "content");
 
 export type MdxListItem = {
   slug: string;
   title: string;
+  source?: string;
+  author?: string;
+  updatedAt?: string;
 };
 
 export type MdxBlock = {
@@ -20,8 +24,20 @@ export type MdxBlock = {
 };
 
 export type MdxPage = MdxListItem & {
-  source: string;
+  content: string;
   blocks: MdxBlock[];
+  references: {
+    index: number;
+    key: string;
+    text?: string;
+    missing: boolean;
+  }[];
+};
+
+type MdxFrontmatter = {
+  source?: string;
+  author?: string;
+  updatedAt?: string;
 };
 
 function transformGlossarySyntax(source: string): string {
@@ -44,6 +60,117 @@ function transformGlossarySyntax(source: string): string {
   });
 }
 
+function transformCitationSyntax(
+  source: string,
+  resolveCitationIndex: (key: string) => number,
+): string {
+  const toCitationTag = (keys: string[]) => {
+    const items = keys
+      .map((key) => `${resolveCitationIndex(key)}:${key}`)
+      .join("|");
+    return `<CitationRef items="${items}" />`;
+  };
+
+  // Syntax: [@citation-key]
+  const afterKeyCitations = source.replace(
+    /\[@([A-Za-z0-9:_-]+)\]/g,
+    (_, rawKey) => {
+      const key = String(rawKey).trim();
+      if (!key) {
+        return _;
+      }
+      return toCitationTag([key]);
+    },
+  );
+
+  // Numeric shorthand syntax: [1] / [1, 2, 3]
+  return afterKeyCitations.replace(
+    /\[(\d+(?:\s*,\s*\d+)*)\](?!\()/g,
+    (_, rawList) => {
+      const keys = String(rawList)
+        .split(",")
+        .map((item) => item.trim())
+        .filter((item) => item.length > 0);
+      if (keys.length === 0) {
+        return _;
+      }
+      return toCitationTag(keys);
+    },
+  );
+}
+
+function toFigureId(token: string): string {
+  return `figure-${token
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")}`;
+}
+
+function transformFigureReferenceSyntax(source: string): string {
+  // Syntax: [[Figure 2-2]]
+  return source.replace(
+    /\[\[\s*Figure\s+([A-Za-z0-9.-]+)\s*\]\]/gi,
+    (_, rawToken) => {
+      const token = String(rawToken).trim();
+      if (!token) {
+        return _;
+      }
+      const label = `Figure ${token}`;
+      const id = toFigureId(token);
+      return `<a href="#${id}" className="figure-ref-link">${label}</a>`;
+    },
+  );
+}
+
+function transformTripleEqualsBlocks(source: string): string {
+  // Syntax:
+  // ===Title line
+  // Body...
+  // ===
+  //
+  // Also supports:
+  // ===
+  // Title line
+  // Body...
+  // ===
+  //
+  // Convert to a dedicated MDX component so it can have styles
+  // independent from regular markdown blockquotes (`>`).
+  return source.replace(
+    /^===[ \t]*(.*?)[ \t]*\r?\n([\s\S]*?)\r?\n===[ \t]*(?:\r?\n)?/gm,
+    (rawMatch, inlineTitle, innerBody) => {
+      const lines = String(innerBody)
+        .replace(/\r/g, "")
+        .split("\n");
+
+      let title = String(inlineTitle ?? "").trim();
+      let bodyLines = lines;
+
+      if (!title) {
+        const firstNonEmptyIndex = lines.findIndex(
+          (line) => line.trim().length > 0,
+        );
+        if (firstNonEmptyIndex < 0) {
+          return rawMatch;
+        }
+
+        title = lines[firstNonEmptyIndex].trim();
+        bodyLines = lines.slice(firstNonEmptyIndex + 1);
+      }
+
+      const escapeAttr = (value: string) =>
+        value
+          .replaceAll("&", "&amp;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;");
+
+      const body = bodyLines.join("\n");
+      return `<TripleEqualsBlock title="${escapeAttr(title)}">\n${body}\n</TripleEqualsBlock>\n\n`;
+    },
+  );
+}
+
 function slugFromFilename(filename: string): string {
   return filename.replace(/\.mdx$/, "");
 }
@@ -60,12 +187,67 @@ function toFallbackTitle(slug: string): string {
     .join(" ");
 }
 
+function parseFrontmatter(source: string): {
+  frontmatter: MdxFrontmatter;
+  body: string;
+} {
+  const match = source.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
+  if (!match) {
+    return { frontmatter: {}, body: source };
+  }
+
+  const frontmatterText = match[1];
+  const body = source.slice(match[0].length);
+  const frontmatter: MdxFrontmatter = {};
+
+  for (const line of frontmatterText.split(/\r?\n/)) {
+    const entry = line.match(/^([A-Za-z][\w-]*)\s*:\s*(.*)$/);
+    if (!entry) {
+      continue;
+    }
+
+    const key = entry[1];
+    const rawValue = entry[2].trim();
+    const value = rawValue.replace(/^['"]|['"]$/g, "");
+
+    if (key === "source") {
+      frontmatter.source = value;
+    } else if (key === "author") {
+      frontmatter.author = value;
+    } else if (key === "updatedAt") {
+      frontmatter.updatedAt = value;
+    }
+  }
+
+  return { frontmatter, body };
+}
+
+function getGitUpdatedAt(slug: string): string | undefined {
+  const relativePath = path.join("content", `${slug}.mdx`);
+
+  try {
+    const output = execFileSync(
+      "git",
+      ["log", "-1", "--format=%cI", "--", relativePath],
+      {
+        cwd: process.cwd(),
+        encoding: "utf8",
+      },
+    ).trim();
+
+    return output.length > 0 ? output : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function splitMdxBlocks(source: string): string[] {
   const blocks: string[] = [];
   const lines = source.split(/\r?\n/);
 
   let current: string[] = [];
   let inFence = false;
+  let inTripleEqualsBlock = false;
 
   const flush = () => {
     if (current.length === 0) {
@@ -79,6 +261,20 @@ function splitMdxBlocks(source: string): string[] {
   };
 
   for (const line of lines) {
+    if (!inFence && line.trim().startsWith("<TripleEqualsBlock")) {
+      inTripleEqualsBlock = true;
+      current.push(line);
+      continue;
+    }
+
+    if (!inFence && inTripleEqualsBlock) {
+      current.push(line);
+      if (line.trim() === "</TripleEqualsBlock>") {
+        inTripleEqualsBlock = false;
+      }
+      continue;
+    }
+
     if (line.trim().startsWith("```")) {
       inFence = !inFence;
       current.push(line);
@@ -137,7 +333,12 @@ function isDirectiveBlock(source: string): boolean {
   return firstLine.startsWith("%%");
 }
 
-function parseDirective(source: string): { kind: "marginalia" | "zh" | "en"; text: string } | null {
+function parseDirective(
+  source: string,
+):
+  | { kind: "marginalia" | "zh" | "en"; text: string }
+  | { kind: "ref"; key: string; text: string }
+  | null {
   const lines = source.split(/\r?\n/);
   if (lines.length === 0) {
     return null;
@@ -150,8 +351,29 @@ function parseDirective(source: string): { kind: "marginalia" | "zh" | "en"; tex
   }
 
   const rawKind = match[1].toLowerCase();
-  if (rawKind !== "marginalia" && rawKind !== "zh" && rawKind !== "en") {
+  if (
+    rawKind !== "marginalia" &&
+    rawKind !== "zh" &&
+    rawKind !== "en" &&
+    rawKind !== "ref"
+  ) {
     return null;
+  }
+
+  if (rawKind === "ref") {
+    const payload = match[2] ?? "";
+    const keyMatch = payload.match(/^([A-Za-z0-9:_-]+)\s*:?\s*(.*)$/);
+    if (!keyMatch) {
+      return null;
+    }
+
+    const key = keyMatch[1].trim();
+    lines[0] = keyMatch[2] ?? "";
+    return {
+      kind: "ref",
+      key,
+      text: lines.join("\n").trim(),
+    };
   }
 
   lines[0] = match[2] ?? "";
@@ -161,23 +383,102 @@ function parseDirective(source: string): { kind: "marginalia" | "zh" | "en"; tex
   };
 }
 
-function toBlocks(source: string): MdxBlock[] {
+function parseReferenceBlock(
+  source: string,
+): { key: string; text: string } | null {
+  const lines = source.split(/\r?\n/);
+  const firstLine = lines[0]?.trim() ?? "";
+  const match = firstLine.match(/^\[(\d+)\]\s+(.+)$/);
+  if (!match) {
+    return null;
+  }
+
+  const key = match[1];
+  lines[0] = match[2];
+  const text = lines.join("\n").trim();
+  if (!text) {
+    return null;
+  }
+
+  return { key, text };
+}
+
+function toBlocks(source: string): {
+  blocks: MdxBlock[];
+  references: {
+    index: number;
+    key: string;
+    text?: string;
+    missing: boolean;
+  }[];
+} {
   const rawBlocks = splitMdxBlocks(source);
   const blocks: MdxBlock[] = [];
   let anchorIndex = 1;
   const headingSlugCounts = new Map<string, number>();
   let lastAnchorableBlock: MdxBlock | null = null;
+  const referenceByKey = new Map<string, string>();
+  const citationIndexByKey = new Map<string, number>();
+  const citationKeyByIndex = new Map<number, string>();
+  let nextSequentialIndex = 1;
+
+  const claimIndex = (key: string, preferred?: number) => {
+    if (
+      typeof preferred === "number" &&
+      preferred > 0 &&
+      !citationKeyByIndex.has(preferred)
+    ) {
+      citationIndexByKey.set(key, preferred);
+      citationKeyByIndex.set(preferred, key);
+      return preferred;
+    }
+
+    while (citationKeyByIndex.has(nextSequentialIndex)) {
+      nextSequentialIndex += 1;
+    }
+    const next = nextSequentialIndex;
+    citationIndexByKey.set(key, next);
+    citationKeyByIndex.set(next, key);
+    nextSequentialIndex += 1;
+    return next;
+  };
+
+  const resolveCitationIndex = (key: string): number => {
+    const existing = citationIndexByKey.get(key);
+    if (existing) {
+      return existing;
+    }
+
+    const numericKey = Number.parseInt(key, 10);
+    const preferred =
+      Number.isFinite(numericKey) && String(numericKey) === key
+        ? numericKey
+        : undefined;
+    return claimIndex(key, preferred);
+  };
 
   for (const blockSource of rawBlocks) {
     if (isDirectiveBlock(blockSource)) {
       const directive = parseDirective(blockSource);
-      if (lastAnchorableBlock && directive && directive.text.length > 0) {
-        if (directive.kind === "marginalia") {
-          lastAnchorableBlock.notes.push(directive.text);
-        } else {
-          lastAnchorableBlock.translations[directive.kind] = directive.text;
+      if (directive) {
+        if (directive.kind === "ref") {
+          if (directive.text.length > 0) {
+            referenceByKey.set(directive.key, directive.text);
+          }
+        } else if (lastAnchorableBlock && directive.text.length > 0) {
+          if (directive.kind === "marginalia") {
+            lastAnchorableBlock.notes.push(directive.text);
+          } else {
+            lastAnchorableBlock.translations[directive.kind] = directive.text;
+          }
         }
       }
+      continue;
+    }
+
+    const parsedReference = parseReferenceBlock(blockSource);
+    if (parsedReference) {
+      referenceByKey.set(parsedReference.key, parsedReference.text);
       continue;
     }
 
@@ -186,7 +487,14 @@ function toBlocks(source: string): MdxBlock[] {
     const shouldAnchorForHeading = kind === "heading";
 
     const block: MdxBlock = {
-      source: kind === "code" ? blockSource : transformGlossarySyntax(blockSource),
+      source:
+        kind === "code"
+          ? blockSource
+          : transformGlossarySyntax(
+              transformFigureReferenceSyntax(
+                transformCitationSyntax(blockSource, resolveCitationIndex),
+              ),
+            ),
       kind,
       notes: [],
       translations: {},
@@ -209,7 +517,20 @@ function toBlocks(source: string): MdxBlock[] {
     blocks.push(block);
   }
 
-  return blocks;
+  return {
+    blocks,
+    references: Array.from(citationIndexByKey.entries())
+      .map(([key, index]) => {
+      const text = referenceByKey.get(key);
+      return {
+        index,
+        key,
+        text,
+        missing: !text,
+      };
+      })
+      .sort((a, b) => a.index - b.index),
+  };
 }
 
 async function readMdxFile(slug: string): Promise<string | null> {
@@ -231,10 +552,16 @@ export async function getMdxList(): Promise<MdxListItem[]> {
         const slug = slugFromFilename(filename);
         const source = await readMdxFile(slug);
         const fallbackTitle = toFallbackTitle(slug);
+        const parsed = parseFrontmatter(source ?? "");
+        const transformedBody = transformTripleEqualsBlocks(parsed.body);
+        const updatedAt = getGitUpdatedAt(slug) ?? parsed.frontmatter.updatedAt;
 
         return {
           slug,
-          title: extractTitle(source ?? "", fallbackTitle),
+          title: extractTitle(transformedBody, fallbackTitle),
+          source: parsed.frontmatter.source,
+          author: parsed.frontmatter.author,
+          updatedAt,
         };
       }),
     );
@@ -246,17 +573,23 @@ export async function getMdxList(): Promise<MdxListItem[]> {
 }
 
 export async function getMdxPage(slug: string): Promise<MdxPage | null> {
-  const source = await readMdxFile(slug);
-  if (!source) {
+  const rawSource = await readMdxFile(slug);
+  if (!rawSource) {
     return null;
   }
 
+  const parsed = parseFrontmatter(rawSource);
+  const transformedBody = transformTripleEqualsBlocks(parsed.body);
+  const updatedAt = getGitUpdatedAt(slug) ?? parsed.frontmatter.updatedAt;
   const fallbackTitle = toFallbackTitle(slug);
 
   return {
     slug,
-    source,
-    title: extractTitle(source, fallbackTitle),
-    blocks: toBlocks(source),
+    content: transformedBody,
+    title: extractTitle(transformedBody, fallbackTitle),
+    ...toBlocks(transformedBody),
+    source: parsed.frontmatter.source,
+    author: parsed.frontmatter.author,
+    updatedAt,
   };
 }
