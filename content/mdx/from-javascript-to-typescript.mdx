@@ -15,7 +15,7 @@ section.
 %%zh JavaScript 由 Brendan Eich 在 1995 年用 10 天时间在 Netscape 设计，旨在让网站易于接近和使用。从那时起，开发者们一直在拿它的怪癖和感知上的缺陷开玩笑。我将在下一节中介绍其中一些。
 
 JavaScript has evolved tremendously since 1995, though! Its steering committee,
-TC39, has released new versions of ECMAScript—the language specification that
+{{TC39|ECMAScript 的技术委员会，负责推进 JavaScript 语言提案和标准化流程。}}, has released new versions of {{ECMAScript|JavaScript 所遵循的标准化语言规范。}}—the language specification that
 JavaScript is based on—yearly since 2015 with new features that bring it in line
 with other modern languages. Impressively, even with regular new language versions,
 JavaScript has managed to maintain backward compatibility for decades in varying
@@ -26,6 +26,8 @@ environments, including browsers, embedded applications, and server runtimes.
 Today, JavaScript is a wonderfully flexible language with a lot of strengths. One
 should appreciate that while JavaScript has its quirks, it’s also helped enable the
 incredible growth of web applications and the internet.
+
+%%zh 如今的 JavaScript 是一门极其灵活且优势明显的语言。我们应当看到，尽管它有不少“怪脾气”，但它同样推动了 Web 应用与整个互联网的惊人发展。
 
 > Show me the perfect programming language and I’ll show you a language with no users.
 >
@@ -62,7 +64,7 @@ the paintPainting function. Perhaps if you’ve worked in the surrounding codeba
 you may recall that painter should be what’s returned by some getPainter function.
 You might even make a lucky guess that painting is a string.
 
-%%marginalia 这是一条中等长度注释，用于和下一段的长注释形成相邻对比。
+%%marginalia 这是一条中等长度注释，用于和下一段的长注释形成相邻对比。这是一条中等长度注释，用于和下一段的长注释形成相邻对比。这是一条中等长度注释，用于和下一段的长注释形成相邻对比。这是一条中等长度注释，用于和下一段的长注释形成相邻对比。这是一条中等长度注释，用于和下一段的长注释形成相邻对比。这是一条中等长度注释，用于和下一段的长注释形成相邻对比。这是一条中等长度注释，用于和下一段的长注释形成相邻对比。这是一条中等长度注释，用于和下一段的长注释形成相邻对比。这是一条中等长度注释，用于和下一段的长注释形成相邻对比。这是一条中等长度注释，用于和下一段的长注释形成相邻对比。这是一条中等长度注释，用于和下一段的长注释形成相邻对比。这是一条中等长度注释，用于和下一段的长注释形成相邻对比。这是一条中等长度注释，用于和下一段的长注释形成相邻对比。
 
 Even if those assumptions are correct, though, later changes to the code may invalid‐
 ate them. Perhaps painting is changed from a string to some other data type, or
@@ -73,6 +75,8 @@ maybe one or more of the painter’s methods are renamed.
 Other languages might refuse to let you run code if their compiler determines it
 would likely crash. Not so with dynamically typed languages—those that run code
 without checking if it will likely crash first—such as JavaScript.
+
+%%zh 在其他语言里，如果编译器判断代码很可能崩溃，通常会直接阻止你运行。像 JavaScript 这样的动态类型语言则不同：它们会先运行，再在运行时暴露潜在崩溃问题。
 
 The freedom of code that makes JavaScript so fun becomes a real pain when you want
 safety in running your code.
@@ -110,9 +114,11 @@ JSDoc has key issues that often make it unpleasant to use in a large codebase:
 Maintaining JSDoc comments across a dozen files doesn’t take up too much time, but
 across hundreds or even thousands of constantly updating files can be a real chore.
 
+%%zh 在十几个文件里维护 JSDoc 注释并不算太费时；但当规模变成几百甚至上千个持续变动的文件时，这会迅速演变为一项沉重负担。
+
 ### Weaker Developer Tooling
 
-Because JavaScript doesn’t provide built-in ways to identify types, and code easily
+Because JavaScript doesn’t provide built-in ways to identify {{types|用于描述值结构与可执行操作的静态信息。}}, and code easily
 diverges from JSDoc comments, it can be difficult to automate large changes to
 or gain insights about a codebase. JavaScript developers are often surprised to see
 features in typed languages such as C# and Java that allow developers to perform class
@@ -132,6 +138,8 @@ open sourced in 2012. The head of its development is Anders Hejlsberg, notable f
 also having lead the development of the popular C# and Turbo Pascal languages.
 TypeScript is often described as a “superset of JavaScript” or “JavaScript with types.”
 But what is TypeScript?
+
+%%zh TypeScript 最初在 2010 年代早期由微软内部创建，并于 2012 年发布并开源。其负责人 Anders Hejlsberg 也曾主导 C# 与 Turbo Pascal 的开发。TypeScript 常被称作“JavaScript 的超集”或“带类型的 JavaScript”。但它究竟是什么？
 
 TypeScript is four things:
 

@@ -24,6 +24,26 @@ export type MdxPage = MdxListItem & {
   blocks: MdxBlock[];
 };
 
+function transformGlossarySyntax(source: string): string {
+  const escapeAttr = (value: string) =>
+    value
+      .replaceAll("&", "&amp;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;");
+
+  // Syntax: {{term|explanation}}
+  return source.replace(/\{\{([^|{}]+)\|([^{}]+)\}\}/g, (rawMatch, rawTerm, rawExplanation) => {
+    const term = rawTerm.trim();
+    const explanation = rawExplanation.trim();
+    if (!term || !explanation) {
+      return rawMatch;
+    }
+
+    return `<GlossaryTerm term="${escapeAttr(term)}" explanation="${escapeAttr(explanation)}" />`;
+  });
+}
+
 function slugFromFilename(filename: string): string {
   return filename.replace(/\.mdx$/, "");
 }
@@ -166,7 +186,7 @@ function toBlocks(source: string): MdxBlock[] {
     const shouldAnchorForHeading = kind === "heading";
 
     const block: MdxBlock = {
-      source: blockSource,
+      source: kind === "code" ? blockSource : transformGlossarySyntax(blockSource),
       kind,
       notes: [],
       translations: {},

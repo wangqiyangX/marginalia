@@ -9,7 +9,7 @@ export function TranslationBlock({ zh, en }: TranslationBlockProps) {
   }
 
   return (
-    <div className="translation-block mt-2 space-y-1 border-l border-zinc-300 pl-4 text-sm text-zinc-600 dark:border-zinc-700 dark:text-zinc-300">
+    <div className="translation-block mt-2 space-y-1 pl-4 text-sm text-zinc-600 dark:text-zinc-300">
       {zh ? (
         <div className="translation-line">
           <span>{zh}</span>

@@ -7,9 +7,9 @@ const STORAGE_KEY = "marginalia-translations-visible";
 export function TranslationVisibilityToggle() {
   const [visible, setVisible] = useState(() => {
     if (typeof window === "undefined") {
-      return false;
+      return true;
     }
-    return window.localStorage.getItem(STORAGE_KEY) === "1";
+    return window.localStorage.getItem(STORAGE_KEY) !== "0";
   });
 
   useEffect(() => {

@@ -27,7 +27,7 @@ body {
 
 .translation-block,
 .translation-block .translation-line {
-  font-family: var(--font-source-han-serif-sc), "Source Han Serif SC", "Noto Serif CJK SC", "Songti SC", "STSong", serif;
+  font-family: var(--font-yozai), "Songti SC", serif;
 }
 
 .translation-panel {
@@ -94,7 +94,49 @@ blockquote code {
 }
 
 .anchor-target {
+  position: relative;
   transition: box-shadow 0.2s ease;
+}
+
+.marginalia-focus-frame {
+  position: fixed;
+  pointer-events: none;
+  z-index: 40;
+  opacity: 0;
+  background-repeat: no-repeat;
+  background-size:
+    18px 2px,
+    2px 18px,
+    18px 2px,
+    2px 18px,
+    18px 2px,
+    2px 18px,
+    18px 2px,
+    2px 18px;
+  background-position:
+    top 0 left 0,
+    top 0 left 0,
+    top 0 right 0,
+    top 0 right 0,
+    bottom 0 left 0,
+    bottom 0 left 0,
+    bottom 0 right 0,
+    bottom 0 right 0;
+  background-image:
+    linear-gradient(rgba(244, 63, 94, 0.9), rgba(244, 63, 94, 0.9)),
+    linear-gradient(rgba(244, 63, 94, 0.9), rgba(244, 63, 94, 0.9)),
+    linear-gradient(rgba(244, 63, 94, 0.9), rgba(244, 63, 94, 0.9)),
+    linear-gradient(rgba(244, 63, 94, 0.9), rgba(244, 63, 94, 0.9)),
+    linear-gradient(rgba(244, 63, 94, 0.9), rgba(244, 63, 94, 0.9)),
+    linear-gradient(rgba(244, 63, 94, 0.9), rgba(244, 63, 94, 0.9)),
+    linear-gradient(rgba(244, 63, 94, 0.9), rgba(244, 63, 94, 0.9)),
+    linear-gradient(rgba(244, 63, 94, 0.9), rgba(244, 63, 94, 0.9));
+  transition:
+    top 0.22s ease-out,
+    left 0.22s ease-out,
+    width 0.22s ease-out,
+    height 0.22s ease-out,
+    opacity 0.12s ease-out;
 }
 
 .anchor-target:target {
@@ -119,6 +161,18 @@ blockquote code {
   .anchor-target:target {
     box-shadow: inset 0 0 0 9999px rgba(63, 63, 70, 0.28);
   }
+
+  .marginalia-focus-frame {
+    background-image:
+      linear-gradient(rgba(251, 113, 133, 0.95), rgba(251, 113, 133, 0.95)),
+      linear-gradient(rgba(251, 113, 133, 0.95), rgba(251, 113, 133, 0.95)),
+      linear-gradient(rgba(251, 113, 133, 0.95), rgba(251, 113, 133, 0.95)),
+      linear-gradient(rgba(251, 113, 133, 0.95), rgba(251, 113, 133, 0.95)),
+      linear-gradient(rgba(251, 113, 133, 0.95), rgba(251, 113, 133, 0.95)),
+      linear-gradient(rgba(251, 113, 133, 0.95), rgba(251, 113, 133, 0.95)),
+      linear-gradient(rgba(251, 113, 133, 0.95), rgba(251, 113, 133, 0.95)),
+      linear-gradient(rgba(251, 113, 133, 0.95), rgba(251, 113, 133, 0.95));
+  }
 }
 
 .marginalia-note {
@@ -129,16 +183,69 @@ blockquote code {
   font-family: var(--font-yozai), "Songti SC", serif;
 }
 
-.marginalia-note-collapsed {
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
+.glossary-term-wrapper {
+  position: relative;
+  display: inline-block;
+  vertical-align: baseline;
+}
+
+.glossary-term-trigger {
+  cursor: help;
+  border-bottom: 1px dashed rgba(20, 184, 166, 0.55);
+  color: #0f766e;
+  outline: none;
+}
+
+.glossary-term-trigger:focus-visible {
+  border-bottom-color: rgba(13, 148, 136, 0.9);
+}
+
+.glossary-term-tooltip {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 10px);
+  z-index: 50;
+  width: max-content;
+  max-width: min(320px, 70vw);
+  transform: translateX(-50%) translateY(4px);
+  opacity: 0;
+  pointer-events: none;
+  border-radius: 10px;
+  border: 1px solid #99f6e4;
+  background: #f0fdfa;
+  color: #134e4a;
+  padding: 0.45rem 0.6rem;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  box-shadow: 0 10px 24px rgba(20, 184, 166, 0.16);
+  transition:
+    opacity 0.14s ease-out,
+    transform 0.14s ease-out;
+}
+
+.glossary-term-tooltip-open {
+  transform: translateX(-50%) translateY(0);
+  opacity: 1;
 }
 
 @media (prefers-color-scheme: dark) {
   .marginalia-note {
     color: #fca5a5;
+  }
+
+  .glossary-term-trigger {
+    border-bottom-color: rgba(94, 234, 212, 0.7);
+    color: #5eead4;
+  }
+
+  .glossary-term-trigger:focus-visible {
+    border-bottom-color: rgba(45, 212, 191, 0.95);
+  }
+
+  .glossary-term-tooltip {
+    border-color: #0f766e;
+    background: #022c22;
+    color: #99f6e4;
+    box-shadow: 0 12px 26px rgba(0, 0, 0, 0.45);
   }
 }

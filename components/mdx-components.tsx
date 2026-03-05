@@ -1,4 +1,5 @@
 import { Noto_Serif } from "next/font/google";
+import { GlossaryTerm } from "@/components/glossary-term";
 
 const bodySerif = Noto_Serif({
   subsets: ["latin"],
@@ -6,6 +7,7 @@ const bodySerif = Noto_Serif({
 });
 
 export const mdxComponents = {
+  GlossaryTerm,
   h1: (props: React.ComponentPropsWithoutRef<"h1">) => (
     <h1
       className="text-4xl font-bold text-zinc-900 dark:text-zinc-100"
