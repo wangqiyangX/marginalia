@@ -24,12 +24,12 @@ type TripleEqualsBlockProps = {
 function TripleEqualsBlock({ title, children }: TripleEqualsBlockProps) {
   return (
     <section className="my-5 border-t border-b border-zinc-300 px-4 py-3 text-zinc-400 dark:border-zinc-700 dark:text-zinc-500">
-      <p
-        className={`${bodySerif.className} mb-3 text-center text-2xl leading-8 font-semibold text-zinc-500 dark:text-zinc-400`}
-      >
+      <p className="mb-3 text-center text-2xl leading-8 font-semibold text-zinc-500 dark:text-zinc-400">
         {title}
       </p>
-      <div className="[&>p+p]:mt-3">{children}</div>
+      <div className="[&>p+p]:mt-3 [&_p]:!text-base [&_p]:!leading-7 [&_p]:!text-zinc-600 dark:[&_p]:!text-zinc-400">
+        {children}
+      </div>
     </section>
   );
 }

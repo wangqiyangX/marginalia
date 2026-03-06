@@ -101,112 +101,114 @@ export default async function ChapterPage({ params }: ChapterPageProps) {
       <TocScale items={tocScaleItems} />
       <ZenFocusController />
 
-      {hasMeta ? (
-        <aside className="zen-meta hidden md:absolute md:top-6 md:left-6 md:block md:max-w-xs md:text-xs md:leading-6 md:text-zinc-500 dark:md:text-zinc-400">
-          {page.source ? <p>{page.source}</p> : null}
-          {page.author ? <p>{page.author}</p> : null}
-          {updatedAtLabel ? <p>{updatedAtLabel}</p> : null}
-        </aside>
-      ) : null}
-
       <section className="mx-auto w-full max-w-3xl space-y-6">
         <div className="flex items-start justify-between gap-4 px-2 md:px-4">
-          <TransitionLink
-            href="/"
-            className="text-sm text-zinc-500 underline-offset-2 hover:underline dark:text-zinc-400"
-          >
-            Back to chapter list
-          </TransitionLink>
-          <div className="flex items-center">
-            <ZenModeToggle />
-            <TranslationVisibilityToggle />
+            <TransitionLink
+              href="/"
+              className="text-sm text-zinc-500 underline-offset-2 hover:underline dark:text-zinc-400"
+            >
+              Back to chapter list
+            </TransitionLink>
+            <div className="flex items-center">
+              <ZenModeToggle />
+              <TranslationVisibilityToggle />
+            </div>
           </div>
-        </div>
 
-        <article className="space-y-4 px-2 py-1 md:px-4">
-          {page.blocks.map((block, index) => {
-            const hasNotes = block.notes.length > 0;
-            const hasTranslations = Boolean(
-              block.translations.zh || block.translations.en,
-            );
+          <div className="relative">
+            {hasMeta ? (
+              <aside className="zen-meta mb-6 px-2 text-xs leading-6 text-zinc-500 dark:text-zinc-400 md:px-4 lg:absolute lg:top-0 lg:left-0 lg:mb-0 lg:w-36 lg:-translate-x-[calc(100%+1.75rem)] lg:px-0 lg:text-right xl:w-40 xl:-translate-x-[calc(100%+2.25rem)]">
+                {page.source ? <p>{page.source}</p> : null}
+                {page.author ? <p>{page.author}</p> : null}
+                {updatedAtLabel ? <p>{updatedAtLabel}</p> : null}
+              </aside>
+            ) : null}
 
-            return (
-              <section
-                key={`${block.anchorId ?? "block"}-${index}`}
-                id={block.anchorId}
-                data-zen-body={
-                  block.kind === "paragraph" ||
-                  block.kind === "blockquote" ||
-                  block.kind === "heading"
-                    ? "true"
-                    : undefined
-                }
-                className={
-                  block.anchorId ? "anchor-target scroll-mt-24" : undefined
-                }
-              >
-                <div className="relative">
-                  <MDXRemote
-                    source={block.source}
-                    components={mdxComponents}
-                    options={{
-                      mdxOptions: {
-                        remarkPlugins: [remarkGfm, remarkDeflist],
-                        rehypePlugins: [[rehypePrettyCode, prettyCodeOptions]],
-                      },
-                    }}
-                  />
+            <article className="space-y-4 px-2 py-1 md:px-4">
+              {page.blocks.map((block, index) => {
+                const hasNotes = block.notes.length > 0;
+                const hasTranslations = Boolean(
+                  block.translations.zh || block.translations.en,
+                );
 
-                  {hasNotes ? (
-                    <MarginaliaNotes
-                      anchorId={block.anchorId ?? ""}
-                      notes={block.notes}
-                    />
-                  ) : null}
-                </div>
+                return (
+                  <section
+                    key={`${block.anchorId ?? "block"}-${index}`}
+                    id={block.anchorId}
+                    data-zen-body={
+                      block.kind === "paragraph" ||
+                      block.kind === "blockquote" ||
+                      block.kind === "heading"
+                        ? "true"
+                        : undefined
+                    }
+                    className={
+                      block.anchorId ? "anchor-target scroll-mt-24" : undefined
+                    }
+                  >
+                    <div className="relative">
+                      <MDXRemote
+                        source={block.source}
+                        components={mdxComponents}
+                        options={{
+                          mdxOptions: {
+                            remarkPlugins: [remarkGfm, remarkDeflist],
+                            rehypePlugins: [[rehypePrettyCode, prettyCodeOptions]],
+                          },
+                        }}
+                      />
 
-                {hasTranslations ? (
-                  <div className="translation-panel">
-                    <TranslationBlock
-                      zh={block.translations.zh}
-                      en={block.translations.en}
-                    />
-                  </div>
-                ) : null}
-              </section>
-            );
-          })}
-        </article>
+                      {hasNotes ? (
+                        <MarginaliaNotes
+                          anchorId={block.anchorId ?? ""}
+                          notes={block.notes}
+                        />
+                      ) : null}
+                    </div>
 
-        {page.references.length > 0 ? (
-          <section className="px-2 pt-3 md:px-4">
-            <h2 className="text-lg font-semibold text-zinc-800 dark:text-zinc-200">
-              References
-            </h2>
-            <ul className="mt-3 space-y-2 text-sm leading-7 text-zinc-700 dark:text-zinc-300">
-              {page.references.map((reference) => (
-                <li
-                  key={reference.key}
-                  id={`ref-${reference.index}`}
-                  className="reference-target scroll-mt-24 rounded-md px-2 py-1"
-                >
-                  <span className="mr-1 text-zinc-600 dark:text-zinc-400">
-                    [{reference.index}]
-                  </span>
-                  <span>
-                    {reference.text ? (
-                      reference.text
-                    ) : (
-                      <span className="italic text-zinc-500 dark:text-zinc-400">
-                        Missing reference definition for <code>{reference.key}</code>.
-                      </span>
-                    )}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </section>
-        ) : null}
+                    {hasTranslations ? (
+                      <div className="translation-panel">
+                        <TranslationBlock
+                          zh={block.translations.zh}
+                          en={block.translations.en}
+                        />
+                      </div>
+                    ) : null}
+                  </section>
+                );
+              })}
+            </article>
+          </div>
+
+          {page.references.length > 0 ? (
+            <section className="px-2 pt-3 md:px-4">
+              <h2 className="text-lg font-semibold text-zinc-800 dark:text-zinc-200">
+                References
+              </h2>
+              <ul className="mt-3 space-y-2 text-sm leading-7 text-zinc-700 dark:text-zinc-300">
+                {page.references.map((reference) => (
+                  <li
+                    key={reference.key}
+                    id={`ref-${reference.index}`}
+                    className="reference-target scroll-mt-24 rounded-md px-2 py-1"
+                  >
+                    <span className="mr-1 text-zinc-600 dark:text-zinc-400">
+                      [{reference.index}]
+                    </span>
+                    <span>
+                      {reference.text ? (
+                        reference.text
+                      ) : (
+                        <span className="italic text-zinc-500 dark:text-zinc-400">
+                          Missing reference definition for <code>{reference.key}</code>.
+                        </span>
+                      )}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
       </section>
     </main>
   );
