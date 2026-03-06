@@ -18,11 +18,16 @@ application must offer: what screens and what buttons you need, and what each
 operation is supposed to do in order to fulfill the purpose of your software.
 These are your functional requirements.
 
+%%marginalia 功能性需求指的是那些用户能够直观看见的，例如web中是否存在筛选按钮、
+列表页能不能下拉刷新等，代表的“是否能用”。
+
 In addition, you probably have nonfunctional requirements: for example, the app
 should be fast, reliable, secure, legally compliant, and easy to maintain. These
 requirements might not be explicitly written down, because they may seem
 somewhat obvious, but they are just as important as the app’s functionality; an
 app that is unbearably slow or unreliable might as well not exist.
+
+%%marginalia 非功能性需求往往代表了“在能用的基础上，是不是能做到更好”
 
 Many nonfunctional requirements, such as security, fall outside the scope of
 this book. But we will consider a few, and this chapter will help you articulate
@@ -31,8 +36,8 @@ them for your own systems. In particular, we will look at the following:
 - Defining and measuring the performance of a system
 - What it means for a service to be reliable—namely, continuing to work
   correctly, even when things go wrong
-- Allowing a system to be scalable by having efficient ways of adding computing
-  capacity as the load on the system grows
+- Allowing a system to be {{scalable|可扩展的}} by having efficient ways of
+  adding computing capacity as the load on the system grows
 - Making it easier to maintain a system in the long term
 
 The terminology introduced in this chapter will also be useful in the following
@@ -84,8 +89,8 @@ SELECT posts.*, users.* FROM posts
 ```
 
 To execute this query, the database will use the follows table to find everybody
-who current_user is following, look up recent posts by those users, and sort
-them by timestamp to get the most recent 1,000 posts by any of the followed
+who `current_user` is following, look up recent posts by those `users`, and sort
+them by `timestamp` to get the most recent 1,000 posts by any of the followed
 users.
 
 Posts are supposed to be timely, so let’s assume that after somebody makes a
@@ -103,12 +108,17 @@ makes 400 million lookups per second—a huge number. And that’s the average c
 Some users follow tens of thousands of accounts; for them, this query is very
 expensive to execute and difficult to make fast.
 
+%%marginalia 如果轮询每个用户所有关注的帖子然后进行合并再推送到该用户的时间线
+上，当用户量上升到百万级别后，这个操作显然是很昂贵的。
+
 ### Materializing and Updating Timelines
 
 How can we do better? First, instead of polling, it would be better if the
 server actively pushed new posts to any followers who are currently online.
 Second, we should precompute the results of the query so that a user’s request
 for their home timeline can be served from a cache.
+
+%%marginalia 主动将新的帖子推送给在线的关注者，比轮询更好。
 
 Imagine that for each user, we store a data structure containing their home
 timeline (i.e., the recent posts by people they are following). Every time a
@@ -119,11 +129,14 @@ Moreover, to receive a notification about any new posts on their timeline, the
 user’s client simply needs to subscribe to the stream of posts being added to
 their home timeline.
 
+%% 预先计算用户上线前其关注者的所发布的帖子并将其存储到时间线结构中。
+
 The downside of this approach is that we now need to do more work every time a
 user makes a post, because the home timelines are derived data that needs to be
 updated. The process is illustrated in [[Figure 2-2]]. When one initial request
 results in several downstream requests being carried out, we use the term
-fan-out to describe the factor by which the number of requests increases.
+{{fan-out|扇出}} to describe the factor by which the number of requests
+increases.
 
 ![Figure 2-2. Fan-out: delivering new posts to every follower of the user who
 made the post](/content/defining-nonfunctional-requirements/figure-2-2.png)
@@ -140,18 +153,25 @@ temporarily take a bit longer for posts to show up in followers’ timelines. Ev
 during such load spikes, timelines remain fast to load, since we simply serve
 them from a cache.
 
+%%marginalia 时间线可以不追求实时性，在负载高峰期可以适当排队，从而保证加载的速
+度不降低。
+
 This process of precomputing and updating the results of a query is called
-materiali‐ zation, and the timeline cache is an example of a materialized view
+_materialization_, and the timeline cache is an example of a materialized view
 (a concept we will discuss further in later chapters). The materialized view
 speeds up reads, but in return we have to do more work on writes. The cost of
 writes for most users is modest, but a social network also has to consider some
 extreme cases:
+
+%%marginalia 将一些操作在云端提前进行（例如写入一些缓存），从而加快读取的速度
 
 - If a user is following a very large number of accounts, and those accounts
   post a lot, that user will have a high rate of writes to their materialized
   timeline. However, that user is not likely reading all the posts in their
   timeline, so it’s OK to simply drop some of their timeline writes and show the
   user only a sample of the posts from the accounts they’re following [5].
+
+%%marginalia 做减法
 
 - When a celebrity account with a very large number of followers makes a post,
   we have to do a lot of work to insert that post into the home timelines of
@@ -171,10 +191,14 @@ _Response time_ : The elapsed time from the moment when a user makes a request
 until they receive the requested answer. The unit of measurement is seconds (or
 milliseconds, or microseconds).
 
+%%marginalia 从请求发出到收到响应所耗费的时间
+
 _Throughput_ : The number of requests per second, or the data volume per second,
 that the system is processing. For a given allocation of hardware resources,
 there is a maximum throughput that can be handled. The unit of measurement is
 “somethings per second.”
+
+%%marginalia 系统每秒处理的数量
 
 In the social network case study, “posts per second” and “timeline writes per
 second” are throughput metrics, whereas “time it takes to load the home
@@ -190,14 +214,17 @@ an earlier request, and therefore the incoming request needs to wait until the
 earlier request has been completed. As throughput approaches the maximum that
 the hardware can handle, queueing delays increase sharply.
 
+%%marginalia 吞吐量和相应时间通常是相关的，原因在于排队时间的存在
+
 ![Figure 2-3. As the throughput of a service approaches its capacity, the
 response time increases dramatically because of
 queueing.](/content/defining-nonfunctional-requirements/figure-2-3.png)
 
 ===When an Overloaded System Won’t Recover If a system is close to overload,
 with throughput pushed close to the limit, it can sometimes enter a vicious
-cycle where it becomes less efficient and hence even more overloaded. For
-example, if a long queue of requests is waiting to be handled, response times
+cycle where it becomes less efficient and hence even more overloaded.
+
+Forexample, if a long queue of requests is waiting to be handled, response times
 may increase so much that clients time out and resend their requests. This
 causes the rate of requests to increase even further, making the problem worse—
 a retry storm. Even when the load is reduced again, such a system may remain in
@@ -215,13 +242,15 @@ asking clients to slow down (backpressure [1, 16]). The choice of queueing and
 load balancing algorithms can also make a difference [17].
 ===
 
-In terms of {{performance metrics|用来衡量一个系统、产品、团队或个人表现好坏的可
-量化数据}}, the response time is usually what users care about the most, whereas
-the throughput determines the required computing resources (e.g., how many
-servers you need) and hence the cost of serving a particular workload. If
-throughput is likely to increase beyond the current hardware’s capability, the
-capacity needs to be expanded; a system is said to be scalable if its maximum
-throughput can be significantly increased by adding computing resources.
+In terms of {{performance metrics|性能指标}}, the response time is usually what
+users care about the most, whereas the throughput determines the required
+computing resources (e.g., how many servers you need) and hence the cost of
+serving a particular workload. If throughput is likely to increase beyond the
+current hardware’s capability, the capacity needs to be expanded; a system is
+said to be scalable if its maximum throughput can be significantly increased by
+adding computing resources.
+
+%%marginalia 所以用户体感最明显的指标是响应时间
 
 In this section we will focus primarily on response times, and we will return to
 throughput and scalability in “Scalability” on page 49.
@@ -242,10 +271,10 @@ Figure 2-4):
   sent over the network if other tasks on the same machine are sending a lot of
   data via the outbound network interface.
 
-- _Latency_ is a {{catchall|笼统的话}} term for time during which a request is
-  not being actively processed—that is, during which it is latent. In
-  particular, _network latency_ or _network delay_ refers to the time that a
-  request and response spend traveling through the network.
+_Latency_ is a {{catchall|笼统的话}} term for time during which a request is
+not being actively processed—that is, during which it is latent. In particular,
+_network latency_ or _network delay_ refers to the time that a request and
+response spend traveling through the network.
 
 %%marginalia 从发出请求到收到响应，数据包在网络中耗费的时间
 
@@ -277,6 +306,8 @@ the time waiting for the prior request to complete. The queueing delay is not
 part of the service time, and for this reason it is important to measure
 response times on the client side.
 
+%%marginalia 在客户端看响应时间更有意义
+
 ### Average, Median, and Percentiles
 
 Because the response time varies from one request to the next, we need to think
@@ -287,8 +318,8 @@ but occasional outliers take much longer. Variation in network delay is also
 known as jitter.
 
 ![Figure 2-5. Illustrating mean and percentiles: response times for a sample of
-100 requests to a
-service](/content/defining-nonfunctional-requirements/figure-2-5.png)
+100 requests to a service](/content/defining-nonfunctional-requirements/f
+igure-2-5.png)
 
 It’s common to report the _average_ response time of a service (technically, the
 arithmetic mean, which you find by summing all the response times and dividing
@@ -315,14 +346,17 @@ For example, if the 95th percentile response time is 1.5 seconds, that means 95
 out of 100 requests take less than 1.5 seconds, and 5 out of 100 requests take
 1.5 seconds or more. This is illustrated in [[Figure 2-5]].
 
-High response-time percentiles, also known as tail latencies, are important
-because they directly affect users’ experience of the service. For example,
-Amazon describes response time requirements for internal services in terms of
-the 99.9th percentile, even though this affects only 1 in 1,000 requests. This
-is because the customers with the slowest requests are often those who have the
-most data on their accounts, as they have made many purchases—that is, they’re
-the most valuable customers [20]. It’s important to keep those customers happy
-by ensuring the website is fast for them.
+High response-time percentiles, also known as {{tail latencies|尾部延迟}}, are
+important because they directly affect users’ experience of the service. For
+example, Amazon describes response time requirements for internal services in
+terms of the 99.9th percentile, even though this affects only 1 in 1,000
+requests. This is because the customers with the slowest requests are often
+those who have the most data on their accounts, as they have made many
+purchases—that is, they’re the most valuable customers [20]. It’s important to
+keep those customers happy by ensuring the website is fast for them.
+
+%%marginalia 一个很重要的观点：那些被影响的用户有很大的可能是重度用户，所以最好
+不要因为其体量小而忽视了。
 
 Optimizing the 99.99th percentile (the slowest 1 in 10,000 requests) was deemed
 too expensive and found to not yield enough benefit for Amazon’s purposes.
@@ -1045,7 +1079,8 @@ Archived at perma.cc/V9G5-KLYK
 [3] Twitter. “Twitter’s Recommendation Algorithm.” blog.x.com, March 2023.
 Archived at perma.cc/L5GT-229T
 
-[4] Raffi Krikorian. “New Tweets per Second Record, and How!” blog.x.com, August 2013. Archived at perma.cc/6JZN-XJYN
+[4] Raffi Krikorian. “New Tweets per Second Record, and How!” blog.x.com, August
+2013. Archived at perma.cc/6JZN-XJYN
 
 [5] Jaz Volpert. “When Imperfect Systems Are Good, Actually: Bluesky’s Lossy
 Timelines.” jazco.dev, February 2025. Archived at perma.cc/2PVE-L2MX
@@ -1057,7 +1092,8 @@ mashable.com, September 2010. Archived at perma.cc/F35N-CGVX
 “Metastable Failures in Distributed Systems.” At Workshop on Hot Topics in
 Operating Systems (HotOS), May 2021. doi:10.1145/3458336.3465286
 
-[8] Marc Brooker. “Metastability and Distributed Systems.” brooker.co.za, May 2021. Archived at perma.cc/7FGJ-7XRK
+[8] Marc Brooker. “Metastability and Distributed Systems.” brooker.co.za, May
+2021. Archived at perma.cc/7FGJ-7XRK
 
 [9] Lexiang Huang, Matthew Magnusson, Abishek Bangalore Muralikrishna, Salman
 Estyak, Rebecca Isaacs, Abutalib Aghayev, Timothy Zhu, and Aleksey Charapko.
@@ -1105,9 +1141,11 @@ Werner Vogels. “Dynamo: Amazon’s Highly Available Key-Value Store.” At 21s
 Symposium on Operating Systems Principles (SOSP), October 2007.
 doi:10.1145/1294261.1294281
 
-[21] Kathryn Whitenton. “The Need for Speed, 23 Years Later.” nngroup.com, May 2020. Archived at perma.cc/C4ER-LZYA
+[21] Kathryn Whitenton. “The Need for Speed, 23 Years Later.” nngroup.com, May
+2020. Archived at perma.cc/C4ER-LZYA
 
-[22] Greg Linden. “Marissa Mayer at Web 2.0.” glinden.blogspot.com, November 2005. Archived at perma.cc/V7EA-3VXB
+[22] Greg Linden. “Marissa Mayer at Web 2.0.” glinden.blogspot.com, November
+2005. Archived at perma.cc/V7EA-3VXB
 
 [23] Jake Brutlag. “Speed Matters for Google Web Search.” services.google.com,
 June 2009. Archived at perma.cc/BK7R-X7M2
@@ -1131,7 +1169,8 @@ doi:10.1145/2408776.2408794
 SLIs, SLOs, and Error Budgets. O’Reilly Media, 2020. ISBN: 9781492076813
 
 [29] Jeffrey C. Mogul and John Wilkes. “Nines Are Not Enough: Meaningful Metrics
-for Clouds.” At 17th Workshop on Hot Topics in Operating Systems (HotOS), May 2019. doi:10.1145/3317550.3321432
+for Clouds.” At 17th Workshop on Hot Topics in Operating Systems (HotOS), May
+2019. doi:10.1145/3317550.3321432
 
 [30] Tamás Hauer, Philipp Hoffmann, John Lunney, Dan Ardelean, and Amer Diwan.
 “Meaningful Availability.” At 17th USENIX Symposium on Networked Systems Design
@@ -1148,7 +1187,8 @@ doi:10.1016/j.simpa.2020.100049
 than Averages).” timescale.com, September 2021. Archived at perma.cc/3PDP-NR8B
 
 [34] Heinrich Hartmann and Theo Schlossnagle. “Circllhist—A Log-Linear Histogram
-Data Structure for IT Infrastructure Monitoring.” arXiv:2001.06561, January 2020.
+Data Structure for IT Infrastructure Monitoring.” arXiv:2001.06561, January
+2020.
 
 [35] Charles Masson, Jee E. Rim, and Homin K. Lee. “DDSketch: A Fast and
 Fully-Mergeable Quantile Sketch with Relative-Error Guarantees.” Proceedings of
@@ -1189,7 +1229,8 @@ Storage Technologies (FAST), February 2007.
 What Does an Mttf of 1,000,000 Hours Mean to You?” At 5th USENIX Conference on
 File and Storage Technologies (FAST), February 2007.
 
-[44] Andy Klein. “Backblaze Drive Stats for Q2 2021.” backblaze.com, August 2021. Archived at perma.cc/2943-UD5E
+[44] Andy Klein. “Backblaze Drive Stats for Q2 2021.” backblaze.com, August
+2021. Archived at perma.cc/2943-UD5E
 
 [45] Iyswarya Narayanan, Di Wang, Myeongjae Jeon, Bikash Sharma, Laura
 Caulfield, Anand Sivasubramaniam, Ben Cutler, Jie Liu, Badriddine Khessib, and
@@ -1207,7 +1248,8 @@ File and Storage Technologies (FAST), February 2016.
 
 [48] Jacob Alter, Ji Xue, Alma Dimnaku, and Evgenia Smirni. “SSD Failures in the
 Field: Symptoms, Causes, and Prediction Models.” At International Conference for
-High Performance Computing, Networking, Storage and Analysis (SC), November 2019. doi:10.1145/3295500.3356172
+High Performance Computing, Networking, Storage and Analysis (SC), November
+2019. doi:10.1145/3295500.3356172
 
 [49] Daniel Ford, François Labelle, Florentina I. Popovici, Murray Stokely,
 Van-Anh Truong, Luiz Barroso, Carrie Grimes, and Sean Quinlan. “Availability in
@@ -1229,7 +1271,8 @@ Corruptions at Scale. arXiv:2102.11245, February 2021.
 
 [53] Diogo Behrens, Marco Serafini, Sergei Arnautov, Flavio P. Junqueira, and
 Christof Fetzer. “Scalable Error Isolation for Distributed Systems.” At 12th
-USENIX Symposium on Networked Systems Design and Implementation (NSDI), May 2015.
+USENIX Symposium on Networked Systems Design and Implementation (NSDI), May
+2015.
 
 [54] Bianca Schroeder, Eduardo Pinheiro, and Wolf-Dietrich Weber. “DRAM Errors
 in the Wild: A Large-Scale Field Study.” At 11th International Joint Conference
@@ -1253,7 +1296,8 @@ adrianco.medium.com, November 2019. Archived at perma.cc/7SYS-BVJP
 
 [59] Shujie Han, Patrick P. C. Lee, Fan Xu, Yi Liu, Cheng He, and Jiongzhou Liu.
 “An In-Depth Study of Correlated Failures in Production SSD-Based Data Centers.”
-At 19th USENIX Conference on File and Storage Technologies (FAST), February 2021.
+At 19th USENIX Conference on File and Storage Technologies (FAST), February
+2021.
 
 [60] Edmund B. Nightingale, John R. Douceur, and Vince Orgovan. “Cycles, Cells
 and Platters: An Empirical Analysis of Hardware Failures on a Million Consumer
@@ -1269,7 +1313,8 @@ Study of 3000+ Issues in Cloud Systems.” At 5th ACM Symposium on Cloud Computi
 [62] Jay Kreps. “Getting Real About Distributed System Reliability.”
 blog.empathybox.com, March 2012. Archived at perma.cc/9B5Q-AEBW
 
-[63] Nelson Minar. “Leap Second Crashes Half the Internet.” somebits.com, July 2012. Archived at perma.cc/2WB8-D6EU
+[63] Nelson Minar. “Leap Second Crashes Half the Internet.” somebits.com, July
+2012. Archived at perma.cc/2WB8-D6EU
 
 [64] Hewlett Packard Enterprise. “Support Alerts—Customer Bulletin
 a00092491en_us.” support.hpe.com, November 2019. Archived at perma.cc/ S5F6-7ZAC
@@ -1310,7 +1355,8 @@ CRC Press, 2017. ISBN: 9781472439055
 [74] Sidney Dekker. Drift into Failure: From Hunting Broken Components to
 Understanding Complex Systems. CRC Press, 2011. ISBN: 9781315257396
 
-[75] John Allspaw. “Blameless PostMortems and a Just Culture.” etsy.com, May 2012. Archived at perma.cc/YMJ7-NTAP
+[75] John Allspaw. “Blameless PostMortems and a Just Culture.” etsy.com, May
+2012. Archived at perma.cc/YMJ7-NTAP
 
 [76] Itzy Sabo. “Uptime Guarantees—A Pragmatic Perspective.” world.hey.com,
 March 2023. Archived at perma.cc/F7TU-78JB
@@ -1382,7 +1428,8 @@ perma.cc/4GUP-2PBV
 at perma.cc/U72T-BFVE
 
 [95] Frederick P. Brooks. “No Silver Bullet—Essence and Accident in Software
-Engineering.” In The Mythical Man-Month, Anniversary edition, Addison-Wesley, 1995. ISBN: 9780201835953
+Engineering.” In The Mythical Man-Month, Anniversary edition, Addison-Wesley,
+1995. ISBN: 9780201835953
 
 [96] Dan Luu. “Against Essential and Accidental Complexity.” danluu.com,
 December 2020. Archived at perma.cc/H5ES-69KC

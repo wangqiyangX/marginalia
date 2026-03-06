@@ -134,8 +134,8 @@ function transformTripleEqualsBlocks(source: string): string {
   // Body...
   // ===
   //
-  // Convert to a dedicated MDX component so it can have styles
-  // independent from regular markdown blockquotes (`>`).
+  // Convert to dedicated MDX components so the title can contain
+  // markdown/MDX safely instead of being serialized into a JSX attribute.
   return source.replace(
     /^===[ \t]*(.*?)[ \t]*\r?\n([\s\S]*?)\r?\n===[ \t]*(?:\r?\n)?/gm,
     (rawMatch, inlineTitle, innerBody) => {
@@ -156,17 +156,25 @@ function transformTripleEqualsBlocks(source: string): string {
 
         title = lines[firstNonEmptyIndex].trim();
         bodyLines = lines.slice(firstNonEmptyIndex + 1);
+      } else {
+        const titleLines = [title];
+        let bodyStartIndex = lines.length;
+
+        for (let index = 0; index < lines.length; index += 1) {
+          const line = lines[index];
+          if (line.trim().length === 0) {
+            bodyStartIndex = index + 1;
+            break;
+          }
+          titleLines.push(line.trim());
+        }
+
+        title = titleLines.join(" ");
+        bodyLines = lines.slice(bodyStartIndex);
       }
 
-      const escapeAttr = (value: string) =>
-        value
-          .replaceAll("&", "&amp;")
-          .replaceAll('"', "&quot;")
-          .replaceAll("<", "&lt;")
-          .replaceAll(">", "&gt;");
-
       const body = bodyLines.join("\n");
-      return `<TripleEqualsBlock title="${escapeAttr(title)}">\n${body}\n</TripleEqualsBlock>\n\n`;
+      return `<TripleEqualsBlock title={<>${title}</>}>\n${body}\n</TripleEqualsBlock>\n\n`;
     },
   );
 }
